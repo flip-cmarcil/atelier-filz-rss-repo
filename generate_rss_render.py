@@ -1,15 +1,19 @@
-
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import email.utils
 from xml.etree.ElementTree import Element, SubElement, ElementTree
+import os
 
 BASE_URL = "https://www.atelierfilz.com"
 RESIDENTIAL_URL = f"{BASE_URL}/design-residentiel"
 COMMERCIAL_URL = f"{BASE_URL}/design-commercial"
 
 MAX_DESCRIPTION_LENGTH = 300
+
+# On s'assure que le dossier public existe
+OUTPUT_FOLDER = "public"
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 def get_projects(index_url):
     res = requests.get(index_url, timeout=20)
@@ -29,7 +33,7 @@ def get_project_details(url):
     res.raise_for_status()
     soup = BeautifulSoup(res.text, "html.parser")
 
-    # Description
+    # Description : premier bloc non vide
     texte = ""
     for tb in soup.select("div.sqs-block-content"):
         p_text = tb.get_text(separator=" ", strip=True)
@@ -39,7 +43,7 @@ def get_project_details(url):
     if len(texte) > MAX_DESCRIPTION_LENGTH:
         texte = texte[:MAX_DESCRIPTION_LENGTH].rsplit(" ", 1)[0] + "…"
 
-    # Meilleure image (dans un bloc image)
+    # Image : meilleure image dans bloc image
     img_url = None
     image_blocks = soup.select("div.sqs-block-image img")
     for img_tag in image_blocks:
@@ -53,7 +57,7 @@ def get_project_details(url):
 
     return texte, img_url
 
-def build_rss(projects, file_name, flux_title, index_url):
+def build_rss(projects, filename, flux_title, index_url):
     rss = Element("rss", {"version": "2.0"})
     channel = SubElement(rss, "channel")
     SubElement(channel, "title").text = flux_title
@@ -71,9 +75,11 @@ def build_rss(projects, file_name, flux_title, index_url):
         if img_url:
             SubElement(item, "enclosure", {"url": img_url, "type": "image/jpeg"})
 
+    # Chemin complet vers le dossier public
+    output_path = os.path.join(OUTPUT_FOLDER, filename)
     tree = ElementTree(rss)
-    tree.write(file_name, encoding="utf-8", xml_declaration=True)
-    print(f"Flux RSS généré : {file_name}")
+    tree.write(output_path, encoding="utf-8", xml_declaration=True)
+    print(f"Flux RSS généré : {output_path}")
 
 if __name__ == "__main__":
     projets_residentiels = get_projects(RESIDENTIAL_URL)
