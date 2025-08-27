@@ -42,7 +42,13 @@ def get_project_details(url):
     if len(texte) > MAX_DESCRIPTION_LENGTH:
         texte = texte[:MAX_DESCRIPTION_LENGTH].rsplit(" ", 1)[0] + "…"
 
-    img_tag = soup.find("img")
+    # Image : première image du bloc projet
+img_url = None
+img_tag = soup.select_one("div.sqs-block-image img")
+if img_tag and img_tag.get("src"):
+    src = img_tag["src"]
+    img_url = urljoin(BASE_URL, src) if src.startswith("/") else src
+
     img_url = urljoin(BASE_URL, img_tag["src"]) if img_tag and img_tag.get("src") else None
 
     return texte, img_url
