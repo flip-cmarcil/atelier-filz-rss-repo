@@ -33,6 +33,7 @@ def get_project_details(url):
 
     soup = BeautifulSoup(res.text, "html.parser")
 
+    # Texte : première description
     texte = ""
     for tb in soup.select("div.sqs-html-content"):
         p = tb.find("p")
@@ -43,13 +44,11 @@ def get_project_details(url):
         texte = texte[:MAX_DESCRIPTION_LENGTH].rsplit(" ", 1)[0] + "…"
 
     # Image : première image du bloc projet
-img_url = None
-img_tag = soup.select_one("div.sqs-block-image img")
-if img_tag and img_tag.get("src"):
-    src = img_tag["src"]
-    img_url = urljoin(BASE_URL, src) if src.startswith("/") else src
-
-    img_url = urljoin(BASE_URL, img_tag["src"]) if img_tag and img_tag.get("src") else None
+    img_url = None
+    img_tag = soup.select_one("div.sqs-block-image img")
+    if img_tag and img_tag.get("src"):
+        src = img_tag["src"]
+        img_url = urljoin(BASE_URL, src) if src.startswith("/") else src
 
     return texte, img_url
 
@@ -71,13 +70,13 @@ def build_rss(projects, filename, category_name):
         if img_url:
             SubElement(item, "enclosure", {"url": img_url, "type": "image/jpeg"})
 
+    os.makedirs("public", exist_ok=True)
     with open(f"public/{filename}", "wb") as f:
         tree = ElementTree(rss)
         tree.write(f, encoding="utf-8", xml_declaration=True)
     print(f"RSS généré: public/{filename}")
 
 if __name__ == "__main__":
-    os.makedirs("public", exist_ok=True)
     for category, url in CATEGORIES.items():
         projets = get_projects(url)
         build_rss(projets, f"atelier_filz_projets_{category}.xml", category)
