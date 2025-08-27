@@ -1,19 +1,19 @@
-import os
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import email.utils
 from xml.etree.ElementTree import Element, SubElement, ElementTree
+import shutil
+import os
 
 BASE_URL = "https://www.atelierfilz.com"
-CATEGORIES = {
-    "residentiel": f"{BASE_URL}/design-residentiel",
-    "commercial": f"{BASE_URL}/design-commercial"
-}
-MAX_DESCRIPTION_LENGTH = 300
+INDEX_URL = f"{BASE_URL}/projets"
 
-def get_projects(index_url):
-    res = requests.get(index_url, timeout=20)
+MAX_DESCRIPTION_LENGTH = 300  # longueur maximale du résumé pour Pinterest
+RSS_FILE = "atelier_filz_projets_rss.xml"
+
+def get_projects():
+    res = requests.get(INDEX_URL, timeout=20)
     res.raise_for_status()
     soup = BeautifulSoup(res.text, "html.parser")
     projects = []
@@ -24,35 +24,35 @@ def get_projects(index_url):
     return projects
 
 def get_project_details(url):
-    try:
-        res = requests.get(url, timeout=20)
-        res.raise_for_status()
-    except Exception as e:
-        print(f"Erreur chargement {url}: {e}")
-        return "", None
-
+    res = requests.get(url, timeout=20)
+    res.raise_for_status()
     soup = BeautifulSoup(res.text, "html.parser")
 
+    # Texte : premier bloc non vide
     texte = ""
-    for tb in soup.select("div.sqs-html-content"):
-        p = tb.find("p")
-        if p and p.get_text(strip=True):
-            texte = p.get_text(strip=True).replace("Crédit photo", "").strip()
+    for tb in soup.select("div.sqs-block-content"):
+        p_text = tb.get_text(separator="\n", strip=True)
+        if p_text:
+            texte = p_text.replace("Crédit photo", "").strip()
             break
     if len(texte) > MAX_DESCRIPTION_LENGTH:
         texte = texte[:MAX_DESCRIPTION_LENGTH].rsplit(" ", 1)[0] + "…"
 
-    img_tag = soup.find("img")
-    img_url = urljoin(BASE_URL, img_tag["src"]) if img_tag and img_tag.get("src") else None
+    # Image : première image pertinente (dans sqs-block-image)
+    img_url = None
+    img_tag = soup.select_one("div.sqs-block-image img")
+    if img_tag and img_tag.get("src"):
+        src = img_tag["src"]
+        img_url = urljoin(BASE_URL, src) if src.startswith("/") else src
 
     return texte, img_url
 
-def build_rss(projects, filename, category_name):
+def build_rss(projects):
     rss = Element("rss", {"version": "2.0"})
     channel = SubElement(rss, "channel")
-    SubElement(channel, "title").text = f"Atelier Filz – Projets {category_name.capitalize()}"
-    SubElement(channel, "link").text = CATEGORIES[category_name]
-    SubElement(channel, "description").text = f"Flux des projets {category_name} Atelier Filz"
+    SubElement(channel, "title").text = "Atelier Filz – Projets"
+    SubElement(channel, "link").text = INDEX_URL
+    SubElement(channel, "description").text = "Flux automatique des réalisations Atelier Filz"
 
     for title, href in projects:
         description, img_url = get_project_details(href)
@@ -65,13 +65,18 @@ def build_rss(projects, filename, category_name):
         if img_url:
             SubElement(item, "enclosure", {"url": img_url, "type": "image/jpeg"})
 
-    with open(f"public/{filename}", "wb") as f:
-        tree = ElementTree(rss)
-        tree.write(f, encoding="utf-8", xml_declaration=True)
-    print(f"RSS généré: public/{filename}")
+    tree = ElementTree(rss)
+    tree.write(RSS_FILE, encoding="utf-8", xml_declaration=True)
+
+    # Déplacement vers le dossier public_html
+    public_html_path = os.path.expanduser("~/public_html/")
+    target_path = os.path.join(public_html_path, RSS_FILE)
+    try:
+        shutil.copy(RSS_FILE, target_path)
+        print(f"RSS déplacé dans public_html : {target_path}")
+    except Exception as e:
+        print(f"Erreur lors du déplacement : {e}")
 
 if __name__ == "__main__":
-    os.makedirs("public", exist_ok=True)
-    for category, url in CATEGORIES.items():
-        projets = get_projects(url)
-        build_rss(projets, f"atelier_filz_projets_{category}.xml", category)
+    projets = get_projects()
+    build_rss(projets)
